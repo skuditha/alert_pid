@@ -28,10 +28,28 @@ FEATURES = [
 
 # Manually specified ranges (EDIT AS NEEDED)
 RANGES = {
-    "kf_dedx": (0, 10),
-    "kf_chi2": (0, 50),
-    "atof_time": (0, 50),
-    "atof_energy": (0, 20),
+    "kf_x": (-2.0, 2.0),
+    "kf_y": (-1.5, 1.5),
+    "kf_z": (-300, 300),
+    "kf_px": (-2000, 2000),
+    "kf_py": (-2000, 2000),
+    "kf_pz": (-5000, 5000),
+    "kf_nhits": (5, 15),
+    "kf_sum_adc": (0, 30000),
+    "kf_path": (0, 250),
+    "kf_dedx": (0, 350),
+    "kf_pdrift": (0, 10000),
+    "kf_chi2": (0, 30),
+    "kf_sum_residuals": (-15, 5),
+    "atof_nbar": (0, 3),
+    "atof_nwedge": (0, 4),
+    "atof_time": (120, 130),
+    "atof_x": (-100, 100),
+    "atof_y": (-100, 100),
+    "atof_z": (-320, 320),
+    "atof_energy": (0, 30),
+    "atof_pathlength": (0, 350),
+    "atof_inpathlength": (0, 24),
 }
 
 NBINS = 100
@@ -72,8 +90,7 @@ for feature in FEATURES:
     axes[5].set_ylabel("Counts")
 
     plt.tight_layout()
-    plt.show()
-    plt.tight_layout()
+    #plt.show()
     plt.savefig(f"plots/{feature}.png")
     plt.close()
 
