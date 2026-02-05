@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 # ==========================
 # Configuration
 # ==========================
-ROOT_FILE = "data/sample.root"
+ROOT_FILE = "data/training_sample.root"
 TREE_NAME = "pidTree"
 
 PID_LIST = [2212, 45, 46, 47, 49]
