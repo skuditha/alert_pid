@@ -39,7 +39,7 @@ int main(int argc, char** argv) {
     hipo::bank b_atof;
     hipo::bank b_mc;
 
-    b_kftrack = factory.getSchema("AHDC::kftrack");
+    b_kftrack = factory.getSchema("AHDC::track");
     b_atof    = factory.getSchema("ATOF::clusters");
     b_mc      = factory.getSchema("MC::Particle");
 
