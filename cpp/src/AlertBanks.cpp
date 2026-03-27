@@ -93,8 +93,8 @@ float AlertBanks::getKfX(int row) const { return impl_->kftrack->getFloat("x", r
 float AlertBanks::getKfY(int row) const { return impl_->kftrack->getFloat("y", row); }
 float AlertBanks::getKfZ(int row) const { return impl_->kftrack->getFloat("z", row); }
 
-float AlertBanks::getKfNHits(int row) const { return impl_->kftrack->getFloat("n_hits", row); }
-float AlertBanks::getKfSumAdc(int row) const { return impl_->kftrack->getFloat("sum_adc", row); }
+float AlertBanks::getKfNHits(int row) const { return impl_->kftrack->getInt("n_hits", row); }
+float AlertBanks::getKfSumAdc(int row) const { return impl_->kftrack->getInt("sum_adc", row); }
 float AlertBanks::getKfPath(int row) const { return impl_->kftrack->getFloat("path", row); }
 float AlertBanks::getKfDEdx(int row) const { return impl_->kftrack->getFloat("dEdx", row); }
 float AlertBanks::getKfPDrift(int row) const { return impl_->kftrack->getFloat("p_drift", row); }
@@ -137,11 +137,11 @@ float AlertBanks::getClusterPathLength(int row) const {
 }
 
 float AlertBanks::getClusterNBar(int row) const {
-    return impl_->clusters->getFloat("n_bar", row);
+    return impl_->clusters->getInt("n_bar", row);
 }
 
 float AlertBanks::getClusterNWedge(int row) const {
-    return impl_->clusters->getFloat("n_wedge", row);
+    return impl_->clusters->getInt("n_wedge", row);
 }
 
 }  // namespace alert::postpid

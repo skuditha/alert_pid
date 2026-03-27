@@ -6,7 +6,8 @@
 
 namespace alert::postpid {
 namespace {
-constexpr float kC_cm_per_ns = 29.9792458f;
+//constexpr float kC_cm_per_ns = 29.9792458f;
+constexpr float kC_mm_per_ns = 299.792458f;
 constexpr float kZeroTol = 1e-12f;
 }  // namespace
 
@@ -98,7 +99,7 @@ float FeatureBuilder::computeAdcPerHit(float sum_adc, float n_hits, bool& valid)
 float FeatureBuilder::computeBeta(float pathlength, float tof_time, bool& valid) {
     if (pathlength > kZeroTol && tof_time > kZeroTol) {
         valid = true;
-        return pathlength / (kC_cm_per_ns * tof_time);
+        return pathlength / (kC_mm_per_ns * tof_time);
     }
     valid = false;
     return 0.0f;
@@ -133,7 +134,7 @@ FeatureRow FeatureBuilder::build(const AlertBanks& banks, const CandidateRefs& r
     const float p_drift = banks.getKfPDrift(kf);
     const float sum_residuals = banks.getKfSumResiduals(kf);
 
-    const float tof_time = banks.getClusterTime(cl);
+    const float tof_time = banks.getClusterTime(cl) - 124.0;
     const float pathlength = banks.getClusterPathLength(cl);
     const float cluster_x = banks.getClusterX(cl);
     const float cluster_y = banks.getClusterY(cl);
