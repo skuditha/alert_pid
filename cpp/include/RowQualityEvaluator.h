@@ -10,6 +10,12 @@ public:
     struct Config {
         float max_p_mevc = 2.0e3f;
         float max_beta = 1.2f;
+        int max_sum_adc = 25000;
+        float max_path = 250.0f;
+        float max_vr = 1.0f;
+        float max_v3 = 300.0f;
+        float max_pathlength = 300.0f;
+        float max_tof_time = 5.0f;
     };
 
    RowQualityEvaluator();                 // default

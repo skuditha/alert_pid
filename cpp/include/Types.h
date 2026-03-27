@@ -29,7 +29,13 @@ enum class RowStatus : int32_t {
     kRowQualityNonPositivePathlength = -23,
     kRowQualityNonPositiveBeta = -24,
     kRowQualityBetaTooLarge = -25,
-    kRowQualityNonFiniteCritical = -26
+    kRowQualityNonFiniteCritical = -26,
+    kRowQualitySumADCTooLarge = -27,
+    kRowQualityPathTooLarge = -28,
+    kRowQualityVrTooLarge = -29,
+    kRowQualityV3TooLarge = -30,
+    kRowQualityPathLengthTooLarge = -31,
+    kRowQualityTOFTimeTooLarge = -32
 };
 
 struct TruthInfo {
