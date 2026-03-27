@@ -1,0 +1,65 @@
+{
+  "version": "v1",
+  "classes": [
+    "proton",
+    "deuteron",
+    "triton",
+    "helium3",
+    "helium4"
+  ],
+  "class_to_pid": {
+    "proton": 2212,
+    "deuteron": 45,
+    "triton": 46,
+    "helium3": 49,
+    "helium4": 47
+  },
+  "pid_to_class": {
+    "2212": "proton",
+    "45": "deuteron",
+    "46": "triton",
+    "49": "helium3",
+    "47": "helium4"
+  },
+  "class_to_index": {
+    "proton": 0,
+    "deuteron": 1,
+    "triton": 2,
+    "helium3": 3,
+    "helium4": 4
+  },
+  "index_to_class": {
+    "0": "proton",
+    "1": "deuteron",
+    "2": "triton",
+    "3": "helium3",
+    "4": "helium4"
+  },
+  "index_to_pid": {
+    "0": 2212,
+    "1": 45,
+    "2": 46,
+    "3": 49,
+    "4": 47
+  },
+  "pid_to_index": {
+    "2212": 0,
+    "45": 1,
+    "46": 2,
+    "49": 3,
+    "47": 4
+  },
+  "output_probability_fields": [
+    "p_proton",
+    "p_deuteron",
+    "p_triton",
+    "p_helium3",
+    "p_helium4"
+  ],
+  "best_pid_field": "best_pid",
+  "notes": [
+    "This file freezes the canonical class ordering for postpid_feature_contract_v1.",
+    "The class index order must be identical in training and inference.",
+    "The output bank field order may differ from internal model storage only if the mapping above is applied consistently."
+  ]
+}
