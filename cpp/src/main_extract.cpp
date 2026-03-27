@@ -67,8 +67,8 @@ std::size_t CountEligibleRows(
         hipo::event event;
         int64_t event_index = 0;
 
-        while (reader.hasNext()) {
-            reader.nextEvent(event);
+        while (reader.next()) {
+            reader.read(event);
             ++event_index;
             cutflow.increment("total_events_seen");
 
@@ -128,8 +128,8 @@ bool WriteDataset(
         hipo::event event;
         int64_t event_index = 0;
 
-        while (reader.hasNext()) {
-            reader.nextEvent(event);
+        while (reader.next()) {
+            reader.read(event);
             ++event_index;
 
             if (!banks.loadEvent(event)) {

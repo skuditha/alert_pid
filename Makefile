@@ -1,46 +1,71 @@
 #************************************************************#
-#* MAKEFILE for compiling C++ files to read HIPO4 into ROOT	*#
-#* AUTHOR: SKUDITHA - July 22, 2024							*#
-#* STEPS to build and run a C++ code named filename.cc:		*#
-#*   (1) make clean											*#
-#*   (2) make filename.o									*#
-#*   (3) make filename										*#
-#*   (4) ./filename											*#
+#* MAKEFILE for ALERT post-PID C++ extractor                *#
+#* Updated for current folder structure                     *#
 #************************************************************#
 
-.PHONY = all clean print
+.PHONY: all clean print dirs
 
-HIPOCFLAGS  := -I$(HIPO)/include/hipo4      
-HIPOLIBS    := -L$(HIPO)/lib
+# ---- Project layout ----
+CPP_DIR   := cpp
+SRC_DIR   := $(CPP_DIR)/src
+INC_DIR   := $(CPP_DIR)/include
+BUILD_DIR := $(CPP_DIR)/build
+BIN_DIR   := $(CPP_DIR)/bin
 
-LZ4LIBS     := -L$(ROOTSYS)/lib/ -lhipo4 -lCore -lCore -lCling -lRIO -lHist -lTree -lGpad -lGraf -lRint -lGraf3d -lPhysics -lMathCore -lMatrix -lTreePlayer -lGX11TTF -lGX11 -lGui -lGed -lGeom -lFitPanel
-LZ4INCLUDES := -I$(ROOTSYS)/lib/include
+# ---- Final executable ----
+TARGET := $(BIN_DIR)/alert_pid_extract
 
-ROOTLIBS     := -L$(ROOTSYS)/lib -lCore -lCling -lRIO -lHist -lTree -lGpad -lGraf -lRint -lGraf3d -lPhysics -lMathCore -lMatrix -lTreePlayer -lGX11TTF -lGX11 -lGui -lGed -lGeom -lFitPanel
+# ---- Tools ----
+CXX   := g++
+H5CXX := h5c++
+
+# ---- External paths ----
+# Expected in environment:
+#   HIPO    -> root of hipo4 installation
+#   ROOTSYS -> root of ROOT installation
+
+# ---- Includes ----
+HIPOCFLAGS   := -I$(HIPO)/include/hipo4
 ROOTINCLUDES := -I$(ROOTSYS)/include
+USERINCLUDES := -I$(INC_DIR)
+LZ4INCLUDES  :=
 
-CXX       := g++
-CXXFLAGS  += -std=c++17 -Wall -Wextra -m64 -pthread -rdynamic  `root-config --libs` `root-config --glibs` 
-LD        := g++ 
-LDFLAGS   += -pthread
+# ---- Compiler flags ----
+CXXFLAGS := -O3 -std=c++17 -Wall -Wextra -m64 -pthread
+CXXFLAGS += $(USERINCLUDES) $(HIPOCFLAGS) $(LZ4INCLUDES) $(ROOTINCLUDES)
 
-SRCS := $(wildcard *.cc)
-BINS := $(SRCS:%.cc=%)
+# ---- Linker flags / libs ----
+HIPOLIBS := -L$(HIPO)/lib -lhipo4
+ROOTLIBS := $(shell root-config --libs 2>/dev/null) $(shell root-config --glibs 2>/dev/null)
+LDFLAGS  := -pthread
 
-all: ${BINS}
+# ---- Sources / objects ----
+SRCS := $(wildcard $(SRC_DIR)/*.cpp)
+OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(SRCS))
+DEPS := $(OBJS:.o=.d)
+
+all: dirs $(TARGET)
+
+dirs:
+	@mkdir -p $(BUILD_DIR) $(BIN_DIR)
 
 print:
-	@echo "Making..."
-	@echo ${SRCS}
+	@echo "Sources: $(SRCS)"
+	@echo "Objects: $(OBJS)"
+	@echo "Target:  $(TARGET)"
 
-$(BINS): %: %.o
-	@echo "Checking..."
-	$(CXX) -o $@ $< $(HIPOLIBS) $(LZ4LIBS) 
+# ---- Compile ----
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp | dirs
+	@echo "Compiling $< ..."
+	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
+
+# ---- Link ----
+$(TARGET): $(OBJS)
+	@echo "Linking $@ ..."
+	$(H5CXX) -O3 -std=c++17 -o $@ $(OBJS) $(LDFLAGS) $(HIPOLIBS) $(ROOTLIBS)
 
 clean:
-	@echo 'Removing all build files...'
-	@rm -rf *.o $(BINS)
+	@echo "Removing build files..."
+	@rm -rf $(BUILD_DIR) $(BIN_DIR)
 
-%.o: %.cc
-	@echo "Creating object..."
-	$(CXX) -c $< -O3 $(CXXFLAGS) $(HIPOCFLAGS) $(LZ4INCLUDES) $(ROOTINCLUDES)
+-include $(DEPS)
