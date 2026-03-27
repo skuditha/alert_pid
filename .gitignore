@@ -42,6 +42,7 @@
 
 data/
 obj/
+bin/
 plots/
 sample_creator
 archive/
