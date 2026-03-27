@@ -12,13 +12,24 @@ constexpr int kNumFeatures = 38;
 enum class RowStatus : int32_t {
     kScoredNoMaskedFeatures = 1,
     kScoredWithMaskedFeatures = 2,
+
+    // Structural eligibility failures
     kMissingProjections = -1,
     kInvalidTrackId = -2,
     kInvalidMatchedAtofHitId = -3,
     kMissingKftrackMatch = -4,
     kMissingAtofHitMatch = -5,
     kInvalidClusterId = -6,
-    kMissingAtofClusterMatch = -7
+    kMissingAtofClusterMatch = -7,
+
+    // Row quality failures
+    kRowQualityNonPositiveP = -20,
+    kRowQualityPTooLarge = -21,
+    kRowQualityNonPositiveTofTime = -22,
+    kRowQualityNonPositivePathlength = -23,
+    kRowQualityNonPositiveBeta = -24,
+    kRowQualityBetaTooLarge = -25,
+    kRowQualityNonFiniteCritical = -26
 };
 
 struct TruthInfo {

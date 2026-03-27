@@ -10,6 +10,7 @@
 #include "MatchResolver.h"
 #include "TruthLabeler.h"
 #include "Types.h"
+#include "RowQualityEvaluator.h"
 
 // Include real HIPO headers in implementation build.
 #include "reader.h"
@@ -94,11 +95,21 @@ std::size_t CountEligibleRows(
                 continue;
             }
 
+            FeatureBuilder feature_builder;
+            RowQualityEvaluator quality_evaluator;
+
             for (int proj_row = 0; proj_row < banks.projectionsRows(); ++proj_row) {
                 CandidateRefs refs;
                 if (!selector.isRowEligible(proj_row, banks, resolver, refs, cutflow)) {
                     continue;
                 }
+
+                FeatureRow features = feature_builder.build(banks, refs);
+
+                if (!quality_evaluator.isRowQualityAcceptable(features, refs, cutflow)) {
+                    continue;
+                }
+
                 ++total_rows;
             }
         }
@@ -154,6 +165,7 @@ bool WriteDataset(
             }
 
             FeatureBuilder feature_builder;
+            RowQualityEvaluator quality_evaluator;
 
             for (int proj_row = 0; proj_row < banks.projectionsRows(); ++proj_row) {
                 CandidateRefs refs;
@@ -162,6 +174,10 @@ bool WriteDataset(
                 }
 
                 FeatureRow features = feature_builder.build(banks, refs);
+
+                if (!quality_evaluator.isRowQualityAcceptable(features, refs, cutflow)) {
+                    continue;
+                }
 
                 OutputRowMeta meta;
                 meta.event_index = event_index;
