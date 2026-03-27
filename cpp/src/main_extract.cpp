@@ -12,8 +12,8 @@
 #include "Types.h"
 
 // Include real HIPO headers in implementation build.
-#include <reader.h>
-#include <event.h>
+#include "reader.h"
+#include "event.h"
 
 using namespace alert::postpid;
 
