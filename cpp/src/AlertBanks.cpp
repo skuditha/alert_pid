@@ -74,7 +74,7 @@ int AlertBanks::getMcPid(int row) const {
 }
 
 int AlertBanks::getProjectionTrackId(int row) const {
-    return impl_->projections->getInt("trackID", row);
+    return impl_->projections->getInt("trackid", row);
 }
 
 int AlertBanks::getProjectionMatchedAtofHitId(int row) const {
