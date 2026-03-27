@@ -46,3 +46,6 @@ bin/
 plots/
 sample_creator
 archive/
+reports/
+__pycache__/
+.venv/
