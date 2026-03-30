@@ -17,6 +17,8 @@ public:
     hid_t d_class_index = -1;
     hid_t d_truth_pid = -1;
     hid_t d_event_index = -1;
+    hid_t d_source_file_index = -1;
+    hid_t d_source_event_file_local_index = -1;
     hid_t d_track_id = -1;
     hid_t d_hit_id = -1;
     hid_t d_cluster_id = -1;
@@ -42,6 +44,50 @@ bool writeStringAttribute(hid_t obj, const char* name, const std::string& value)
     H5Aclose(attr);
     H5Sclose(space);
     H5Tclose(type);
+    return status >= 0;
+}
+
+bool writeStringDataset1D(hid_t parent, const char* name, const std::vector<std::string>& values) {
+    const hsize_t dims[1] = {static_cast<hsize_t>(values.size())};
+    hid_t space = H5Screate_simple(1, dims, nullptr);
+    if (space < 0) {
+        return false;
+    }
+
+    hid_t type = H5Tcopy(H5T_C_S1);
+    if (type < 0) {
+        H5Sclose(space);
+        return false;
+    }
+
+    H5Tset_size(type, H5T_VARIABLE);
+    H5Tset_cset(type, H5T_CSET_UTF8);
+    H5Tset_strpad(type, H5T_STR_NULLTERM);
+
+    hid_t ds = H5Dcreate2(parent, name, type, space, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    if (ds < 0) {
+        H5Tclose(type);
+        H5Sclose(space);
+        return false;
+    }
+
+    std::vector<const char*> c_values;
+    c_values.reserve(values.size());
+    for (const auto& value : values) {
+        c_values.push_back(value.c_str());
+    }
+
+    const herr_t status = H5Dwrite(
+        ds,
+        type,
+        H5S_ALL,
+        H5S_ALL,
+        H5P_DEFAULT,
+        c_values.empty() ? nullptr : c_values.data());
+
+    H5Dclose(ds);
+    H5Tclose(type);
+    H5Sclose(space);
     return status >= 0;
 }
 
@@ -124,6 +170,9 @@ bool DataWriter::open(const std::string& output_path, std::size_t n_rows) {
     impl_->d_truth_pid = create1D(g_labels, "truth_pid", H5T_STD_I32LE, impl_->n_rows);
 
     impl_->d_event_index = create1D(g_rowmeta, "event_index", H5T_STD_I64LE, impl_->n_rows);
+    impl_->d_source_file_index = create1D(g_rowmeta, "source_file_index", H5T_STD_I32LE, impl_->n_rows);
+    impl_->d_source_event_file_local_index =
+        create1D(g_rowmeta, "source_event_file_local_index", H5T_STD_I64LE, impl_->n_rows);
     impl_->d_track_id = create1D(g_rowmeta, "track_id", H5T_STD_I32LE, impl_->n_rows);
     impl_->d_hit_id = create1D(g_rowmeta, "matched_atof_hit_id", H5T_STD_I32LE, impl_->n_rows);
     impl_->d_cluster_id = create1D(g_rowmeta, "cluster_id", H5T_STD_I32LE, impl_->n_rows);
@@ -156,9 +205,14 @@ bool DataWriter::writeRow(std::size_t index, const FeatureRow& features, const O
 
     ok &= writeRow1D(impl_->d_class_index, row, H5T_NATIVE_INT32, &meta.class_index);
     ok &= writeRow1D(impl_->d_truth_pid, row, H5T_NATIVE_INT32, &meta.truth_pid);
-
     ok &= writeRow1D(impl_->d_event_index, row, H5T_NATIVE_INT64, &meta.event_index);
-    ok &= writeRow1D(impl_->d_track_id, row, H5T_NATIVE_INT32, &meta.track_id);
+    ok &= writeRow1D(impl_->d_source_file_index, row, H5T_NATIVE_INT32, &meta.source_file_index);
+    ok &= writeRow1D(
+        impl_->d_source_event_file_local_index,
+        row,
+        H5T_NATIVE_INT64,
+        &meta.source_event_file_local_index);
+     ok &= writeRow1D(impl_->d_track_id, row, H5T_NATIVE_INT32, &meta.track_id);
     ok &= writeRow1D(impl_->d_hit_id, row, H5T_NATIVE_INT32, &meta.matched_atof_hit_id);
     ok &= writeRow1D(impl_->d_cluster_id, row, H5T_NATIVE_INT32, &meta.cluster_id);
     ok &= writeRow1D(impl_->d_status, row, H5T_NATIVE_INT32, &meta.status);
@@ -188,6 +242,7 @@ bool DataWriter::writeMetadata(
         joined_inputs += input_files[i];
     }
     writeStringAttribute(g_meta, "input_files_csv", joined_inputs);
+    writeStringDataset1D(g_meta, "source_files", input_files);
 
     const int32_t n_features = kNumFeatures;
     hid_t ds_nf = create1D(g_meta, "n_features", H5T_STD_I32LE, 1);
@@ -222,6 +277,8 @@ bool DataWriter::close() {
     close_ds(impl_->d_class_index);
     close_ds(impl_->d_truth_pid);
     close_ds(impl_->d_event_index);
+    close_ds(impl_->d_source_file_index);
+    close_ds(impl_->d_source_event_file_local_index);
     close_ds(impl_->d_track_id);
     close_ds(impl_->d_hit_id);
     close_ds(impl_->d_cluster_id);

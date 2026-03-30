@@ -1,4 +1,5 @@
 #include <iostream>
+#include <unordered_set>
 #include <string>
 #include <vector>
 
@@ -55,7 +56,8 @@ std::size_t CountEligibleRows(
 {
     std::size_t total_rows = 0;
 
-    for (const auto& path : cfg.input_files) {
+    for (std::size_t source_file_index = 0; source_file_index < cfg.input_files.size(); ++source_file_index) {
+        const auto& path = cfg.input_files[source_file_index];
         hipo::reader reader;
         reader.open(path.c_str());
 
@@ -126,7 +128,8 @@ bool WriteDataset(
 {
     std::size_t row_index = 0;
 
-    for (const auto& path : cfg.input_files) {
+    for (std::size_t source_file_index = 0; source_file_index < cfg.input_files.size(); ++source_file_index) {
+        const auto& path = cfg.input_files[source_file_index];
         hipo::reader reader;
         reader.open(path.c_str());
 
@@ -181,6 +184,8 @@ bool WriteDataset(
 
                 OutputRowMeta meta;
                 meta.event_index = event_index;
+                meta.source_file_index = static_cast<int32_t>(source_file_index);
+                meta.source_event_file_local_index = event_index;
                 meta.run_number = -1;
                 meta.track_id = refs.track_id;
                 meta.matched_atof_hit_id = refs.matched_atof_hit_id;
@@ -211,6 +216,18 @@ int main(int argc, char** argv) {
     Config cfg;
     if (!ParseArgs(argc, argv, cfg)) {
         return 1;
+    }
+
+    {
+        std::vector<std::string> deduped_input_files;
+        deduped_input_files.reserve(cfg.input_files.size());
+        std::unordered_set<std::string> seen;
+        for (const auto& path : cfg.input_files) {
+            if (seen.insert(path).second) {
+                deduped_input_files.push_back(path);
+            }
+        }
+        cfg.input_files = std::move(deduped_input_files);
     }
 
     TruthLabeler truth_labeler;

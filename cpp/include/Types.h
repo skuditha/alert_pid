@@ -66,6 +66,8 @@ struct FeatureRow {
 
 struct OutputRowMeta {
     int64_t event_index = -1;
+    int32_t source_file_index = -1;
+    int64_t source_event_file_local_index = -1;
     int32_t run_number = -1;
     int32_t track_id = -1;
     int32_t matched_atof_hit_id = -1;
