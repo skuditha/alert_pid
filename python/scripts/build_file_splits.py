@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Build train/val/test splits for ALERT post-PID data by SOURCE FILE, not by row.
+Build train/val/test splits for ALERT post-PID data by SOURCE FILE, not by row,
+and optionally write split HDF5 files.
 
-This version is designed for the current HDF5 schema, for example:
-
+Expected HDF5 layout includes row-aligned datasets such as:
   /features/values                  shape (N, F)
   /features/masks                   shape (N, F)
   /labels/class_index               shape (N,)
@@ -17,11 +17,10 @@ Key behavior:
 - Groups rows by row_meta/source_file_index
 - Computes file-level class histograms
 - Performs file-level greedy stratified train/val/test split
-- Writes row-index arrays for each split
-- Writes a JSON summary with sanity checks
-- Detects leakage if any source file appears in multiple splits
-
-If a dataset_meta/source_files mapping is present, it is included in logs/summary.
+- Writes row-index arrays
+- Optionally writes train.h5 / val.h5 / test.h5 preserving structure
+- Copies metadata groups like /dataset_meta unchanged
+- Validates no leakage across splits
 """
 
 from __future__ import annotations
@@ -53,40 +52,20 @@ def parse_args() -> argparse.Namespace:
         help="Directory to write split outputs.",
     )
 
-    p.add_argument(
-        "--train-frac",
-        type=float,
-        default=0.70,
-        help="Target train fraction.",
-    )
-    p.add_argument(
-        "--val-frac",
-        type=float,
-        default=0.15,
-        help="Target val fraction.",
-    )
-    p.add_argument(
-        "--test-frac",
-        type=float,
-        default=0.15,
-        help="Target test fraction.",
-    )
-    p.add_argument(
-        "--seed",
-        type=int,
-        default=1337,
-        help="Random seed.",
-    )
+    p.add_argument("--train-frac", type=float, default=0.70)
+    p.add_argument("--val-frac", type=float, default=0.15)
+    p.add_argument("--test-frac", type=float, default=0.15)
+    p.add_argument("--seed", type=int, default=1337)
 
     p.add_argument(
         "--label-col",
         default="labels/class_index",
-        help="Nested HDF5 dataset path for labels. Default: labels/class_index",
+        help="Nested HDF5 dataset path for labels.",
     )
     p.add_argument(
         "--source-file-col",
         default="row_meta/source_file_index",
-        help="Nested HDF5 dataset path for per-row source file index. Default: row_meta/source_file_index",
+        help="Nested HDF5 dataset path for per-row source file index.",
     )
     p.add_argument(
         "--source-files-dset",
@@ -98,17 +77,38 @@ def parse_args() -> argparse.Namespace:
         "--max-rows-per-input",
         type=int,
         default=None,
-        help="Optional cap for debugging.",
+        help="Optional debug cap.",
     )
     p.add_argument(
         "--summary-json",
         default="split_summary.json",
-        help="Name of summary JSON file to write in output-dir.",
+        help="Summary JSON filename inside output-dir.",
     )
     p.add_argument(
         "--print-file-map",
         action="store_true",
         help="Print source_file_index -> filename mapping when available.",
+    )
+
+    p.add_argument(
+        "--write-split-h5",
+        action="store_true",
+        help="Write split HDF5 files (single input only).",
+    )
+    p.add_argument(
+        "--train-h5-name",
+        default="train.h5",
+        help="Output name for train HDF5.",
+    )
+    p.add_argument(
+        "--val-h5-name",
+        default="val.h5",
+        help="Output name for val HDF5.",
+    )
+    p.add_argument(
+        "--test-h5-name",
+        default="test.h5",
+        help="Output name for test HDF5.",
     )
 
     return p.parse_args()
@@ -121,17 +121,12 @@ def decode_if_bytes(x):
 
 
 def read_dataset_exact_or_leaf(f: h5py.File, dataset_path: str) -> h5py.Dataset:
-    """
-    Resolve dataset by exact nested path first.
-    If that fails and the provided name is a leaf name, recursively search by leaf.
-    """
     if dataset_path in f:
         obj = f[dataset_path]
         if isinstance(obj, h5py.Dataset):
             return obj
         raise KeyError(f"Path exists but is not a dataset: {dataset_path}")
 
-    # Fallback: recursive leaf-name search
     matches = []
 
     def visitor(name, obj):
@@ -146,7 +141,7 @@ def read_dataset_exact_or_leaf(f: h5py.File, dataset_path: str) -> h5py.Dataset:
     if len(matches) > 1:
         raise KeyError(
             f"Dataset '{dataset_path}' is ambiguous. Matches: {matches}. "
-            f"Please pass the full nested path."
+            f"Please pass the full path."
         )
 
     return f[matches[0]]
@@ -179,9 +174,7 @@ def maybe_read_source_file_names(
 
     arr = ds[:]
     if arr.ndim != 1:
-        raise ValueError(
-            f"Source files dataset '{dataset_path}' must be 1D, got shape {arr.shape}"
-        )
+        raise ValueError(f"Dataset '{dataset_path}' must be 1D, got shape {arr.shape}")
     return [str(decode_if_bytes(x)) for x in arr]
 
 
@@ -207,7 +200,6 @@ def load_input_rows(
     labels = np.asarray(labels)
     source_file_index = np.asarray(source_file_index)
 
-    # Normalize types
     if labels.dtype.kind not in ("i", "u"):
         labels = labels.astype(np.int64)
     if source_file_index.dtype.kind not in ("i", "u"):
@@ -225,7 +217,7 @@ def load_input_rows(
         }
     )
 
-    # Namespace the grouping key by input file so multiple H5 inputs do not collide.
+    # Namespace source_file_index by input file to avoid collisions if multiple H5s are provided.
     df["group_key"] = df["input_id"].astype(str) + ":" + df["source_file_index"].astype(str)
 
     return df, source_files
@@ -257,21 +249,18 @@ def aggregate_file_stats(
         raise RuntimeError("No rows loaded.")
 
     all_rows = pd.concat(row_chunks, ignore_index=True)
-
-    unique_labels = sorted(int(x) for x in all_rows["label"].unique().tolist())
+    class_cols = sorted(int(x) for x in all_rows["label"].unique().tolist())
 
     grouped = (
         all_rows.groupby(["group_key", "input_id", "input_path", "source_file_index"])["label"]
         .value_counts()
         .unstack(fill_value=0)
-        .reindex(columns=unique_labels, fill_value=0)
+        .reindex(columns=class_cols, fill_value=0)
         .reset_index()
     )
+    grouped["total_rows"] = grouped[class_cols].sum(axis=1)
 
-    grouped["total_rows"] = grouped[unique_labels].sum(axis=1)
-
-    # Add optional file-name mapping
-    source_file_name: List[Optional[str]] = []
+    source_file_name = []
     for _, row in grouped.iterrows():
         input_id = int(row["input_id"])
         source_idx = int(row["source_file_index"])
@@ -282,13 +271,12 @@ def aggregate_file_stats(
             source_file_name.append(None)
     grouped["source_file_name"] = source_file_name
 
-    # Stable/reproducible ordering
     grouped = grouped.sort_values(
         ["total_rows", "input_id", "source_file_index"],
         ascending=[False, True, True],
     ).reset_index(drop=True)
 
-    return grouped, all_rows, source_files_by_input, unique_labels
+    return grouped, all_rows, source_files_by_input, class_cols
 
 
 def compute_global_distribution(stats_df: pd.DataFrame, class_cols: List[int]) -> Dict[int, float]:
@@ -303,11 +291,7 @@ def split_score(split_counts: Dict[int, float], global_dist: Dict[int, float]) -
     total = sum(split_counts.values())
     if total <= 0:
         return 0.0
-    score = 0.0
-    for cls, g in global_dist.items():
-        frac = split_counts[cls] / total
-        score += abs(frac - g)
-    return score
+    return sum(abs(split_counts[cls] / total - global_dist[cls]) for cls in global_dist)
 
 
 def greedy_stratified_split(
@@ -322,11 +306,9 @@ def greedy_stratified_split(
         raise ValueError("train/val/test fractions must sum to 1.")
 
     rng = random.Random(seed)
-
     files = stats_df.to_dict(orient="records")
     rng.shuffle(files)
 
-    # Prioritize rare-class-heavy files and larger files.
     class_totals = {cls: float(stats_df[cls].sum()) for cls in class_cols}
 
     def rarity_key(row):
@@ -334,15 +316,10 @@ def greedy_stratified_split(
         for cls in class_cols:
             if row[cls] > 0 and class_totals[cls] > 0:
                 present.append(row[cls] / class_totals[cls])
-        if not present:
-            return 0.0
-        return max(present)
+        return max(present) if present else 0.0
 
     files.sort(
-        key=lambda r: (
-            rarity_key(r),
-            r["total_rows"],
-        ),
+        key=lambda r: (rarity_key(r), r["total_rows"]),
         reverse=True,
     )
 
@@ -396,7 +373,6 @@ def greedy_stratified_split(
                 best_obj = obj
                 best_split = split_name
 
-        assert best_split is not None
         splits[best_split].append(row["group_key"])
         for cls in class_cols:
             split_counts[best_split][cls] += row[cls]
@@ -450,7 +426,8 @@ def summarize_splits(
 
         class_counts = {str(cls): int(sub[cls].sum()) for cls in class_cols}
         class_fractions = {
-            str(cls): (class_counts[str(cls)] / rows if rows else 0.0) for cls in class_cols
+            str(cls): (class_counts[str(cls)] / rows if rows else 0.0)
+            for cls in class_cols
         }
 
         summary["splits"][split_name] = {
@@ -484,7 +461,7 @@ def validate_no_leakage(splits: Dict[str, List[str]]) -> None:
             if key in seen:
                 raise RuntimeError(
                     f"Leakage detected: group_key '{key}' appears in both "
-                    f"'{seen[key]}' and '{split_name}'."
+                    f"{seen[key]} and {split_name}"
                 )
             seen[key] = split_name
 
@@ -501,12 +478,89 @@ def validate_assignment_complete(stats_df: pd.DataFrame, splits: Dict[str, List[
     if extra:
         raise RuntimeError(f"Unexpected assigned groups found: {sorted(extra)[:10]}")
 
-    overlap_tv = set(splits["train"]) & set(splits["val"])
-    overlap_tt = set(splits["train"]) & set(splits["test"])
-    overlap_vt = set(splits["val"]) & set(splits["test"])
-
-    if overlap_tv or overlap_tt or overlap_vt:
+    if set(splits["train"]) & set(splits["val"]) or set(splits["train"]) & set(splits["test"]) or set(splits["val"]) & set(splits["test"]):
         raise RuntimeError("Leakage detected: one or more file groups appear in multiple splits.")
+
+
+def copy_attrs(src_obj, dst_obj) -> None:
+    for k, v in src_obj.attrs.items():
+        dst_obj.attrs[k] = v
+
+
+def is_row_aligned_dataset(ds: h5py.Dataset, n_rows: int) -> bool:
+    return ds.shape is not None and len(ds.shape) >= 1 and ds.shape[0] == n_rows
+
+
+def copy_non_row_aligned_dataset(src_ds: h5py.Dataset, dst_parent: h5py.Group, name: str) -> None:
+    dst_ds = dst_parent.create_dataset(
+        name,
+        data=src_ds[()],
+        dtype=src_ds.dtype,
+        compression=src_ds.compression,
+        compression_opts=src_ds.compression_opts,
+        shuffle=src_ds.shuffle,
+        fletcher32=src_ds.fletcher32,
+        chunks=src_ds.chunks,
+    )
+    copy_attrs(src_ds, dst_ds)
+
+
+def copy_row_aligned_dataset(
+    src_ds: h5py.Dataset,
+    dst_parent: h5py.Group,
+    name: str,
+    row_indices: np.ndarray,
+) -> None:
+    data = src_ds[row_indices]
+    dst_ds = dst_parent.create_dataset(
+        name,
+        data=data,
+        dtype=data.dtype,
+        compression=src_ds.compression,
+        compression_opts=src_ds.compression_opts,
+        shuffle=src_ds.shuffle,
+        fletcher32=src_ds.fletcher32,
+        chunks=True if data.ndim > 0 else None,
+    )
+    copy_attrs(src_ds, dst_ds)
+
+
+def subset_h5_recursive(
+    src_group: h5py.Group,
+    dst_group: h5py.Group,
+    row_indices: np.ndarray,
+    n_rows: int,
+) -> None:
+    copy_attrs(src_group, dst_group)
+
+    for key, item in src_group.items():
+        if isinstance(item, h5py.Group):
+            child = dst_group.create_group(key)
+            subset_h5_recursive(item, child, row_indices, n_rows)
+        elif isinstance(item, h5py.Dataset):
+            if is_row_aligned_dataset(item, n_rows):
+                copy_row_aligned_dataset(item, dst_group, key, row_indices)
+            else:
+                copy_non_row_aligned_dataset(item, dst_group, key)
+        else:
+            raise TypeError(f"Unsupported HDF5 object type at {item.name}")
+
+
+def write_subset_h5(
+    input_path: Path,
+    output_path: Path,
+    row_indices: np.ndarray,
+    label_col: str,
+) -> None:
+    row_indices = np.asarray(row_indices, dtype=np.int64)
+    row_indices.sort()
+
+    with h5py.File(input_path, "r") as src:
+        label_ds = read_dataset_exact_or_leaf(src, label_col)
+        n_rows = int(label_ds.shape[0])
+
+        with h5py.File(output_path, "w") as dst:
+            subset_h5_recursive(src, dst, row_indices, n_rows)
 
 
 def write_outputs(
@@ -522,41 +576,34 @@ def write_outputs(
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # File-level stats table
     stats_df.to_csv(out_dir / "file_level_stats.csv", index=False)
 
-    # Row index outputs
-    # If only one input, also write train_indices.npy / val_indices.npy / test_indices.npy
     if len(inputs) == 1:
         for split_name in ["train", "val", "test"]:
             arr = split_row_indices[split_name].get(0, np.array([], dtype=np.int64))
             np.save(out_dir / f"{split_name}_indices.npy", arr)
 
-    # For multiple inputs, or additionally for traceability, write a compressed NPZ
     npz_payload = {}
     for split_name in ["train", "val", "test"]:
         for input_id in range(len(inputs)):
-            key = f"{split_name}_input{input_id}"
-            npz_payload[key] = split_row_indices[split_name].get(input_id, np.array([], dtype=np.int64))
+            npz_payload[f"{split_name}_input{input_id}"] = split_row_indices[split_name].get(
+                input_id, np.array([], dtype=np.int64)
+            )
     np.savez_compressed(out_dir / "split_indices_by_input.npz", **npz_payload)
 
-    # Per-split row manifests
     for split_name, group_keys in splits.items():
         sub = all_rows[all_rows["group_key"].isin(group_keys)].copy()
         sub = sub.sort_values(["input_id", "row_index"]).reset_index(drop=True)
         sub.to_csv(out_dir / f"{split_name}_rows.csv", index=False)
 
-    # Per-split file manifests
     for split_name, group_keys in splits.items():
         sub = stats_df[stats_df["group_key"].isin(group_keys)].copy()
         sub = sub.sort_values(["input_id", "source_file_index"]).reset_index(drop=True)
         sub.to_csv(out_dir / f"{split_name}_source_files.csv", index=False)
 
-    # Summary JSON
     with open(out_dir / summary_json_name, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
 
-    # Human-readable manifest
     manifest = {
         "inputs": [str(p.resolve()) for p in inputs],
         "file_level_stats_csv": str((out_dir / "file_level_stats.csv").resolve()),
@@ -567,15 +614,6 @@ def write_outputs(
             "val": str((out_dir / "val_indices.npy").resolve()) if len(inputs) == 1 else None,
             "test": str((out_dir / "test_indices.npy").resolve()) if len(inputs) == 1 else None,
         },
-        "per_split_row_manifests": {
-            split_name: str((out_dir / f"{split_name}_rows.csv").resolve())
-            for split_name in ["train", "val", "test"]
-        },
-        "per_split_source_file_manifests": {
-            split_name: str((out_dir / f"{split_name}_source_files.csv").resolve())
-            for split_name in ["train", "val", "test"]
-        },
-        "class_labels_seen": class_cols,
     }
     with open(out_dir / "manifest.json", "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2)
@@ -599,16 +637,13 @@ def print_summary(summary: Dict) -> None:
         print(f"       class counts: {info['class_counts']}")
 
 
-def print_file_mapping(
-    stats_df: pd.DataFrame,
-    max_print: int = 200,
-) -> None:
+def print_file_mapping(stats_df: pd.DataFrame, max_print: int = 200) -> None:
     with_names = stats_df[stats_df["source_file_name"].notna()].copy()
     if with_names.empty:
         print("\nNo dataset_meta/source_files mapping found.")
         return
 
-    print("\nSource file mapping (showing up to first %d rows):" % max_print)
+    print(f"\nSource file mapping (showing up to first {max_print} rows):")
     cols = ["input_id", "source_file_index", "source_file_name"]
     dedup = with_names[cols].drop_duplicates().sort_values(["input_id", "source_file_index"])
     for _, row in dedup.head(max_print).iterrows():
@@ -670,7 +705,29 @@ def main() -> None:
     if args.print_file_map:
         print_file_mapping(stats_df)
 
-    print("\nLeakage check passed: no source_file_index group appears in more than one split.")
+    if args.write_split_h5:
+        if len(inputs) != 1:
+            raise RuntimeError("--write-split-h5 currently supports exactly one input HDF5 file.")
+
+        input_path = inputs[0]
+        split_to_name = {
+            "train": args.train_h5_name,
+            "val": args.val_h5_name,
+            "test": args.test_h5_name,
+        }
+
+        for split_name in ["train", "val", "test"]:
+            row_indices = split_row_indices[split_name].get(0, np.array([], dtype=np.int64))
+            out_path = out_dir / split_to_name[split_name]
+            write_subset_h5(
+                input_path=input_path,
+                output_path=out_path,
+                row_indices=row_indices,
+                label_col=args.label_col,
+            )
+            print(f"Wrote {split_name} HDF5: {out_path}")
+
+    print("\nLeakage check passed: no source-file group appears in more than one split.")
 
 
 if __name__ == "__main__":
