@@ -1,0 +1,41 @@
+random_seed: 42
+verbose: 0
+
+# Masking / feature-assembly modes:
+# - numeric_plus_mask_indicators  (default)
+# - numeric_only
+# - exclude_masked_rows
+masking_mode: numeric_plus_mask_indicators
+
+# Only used when masking_mode == exclude_masked_rows
+append_mask_indicators_when_excluding: false
+
+# How masked numeric values are deterministically filled before model ingestion:
+# - zero
+# - median
+# - mean
+masked_value_fill_strategy: zero
+
+# Class weighting via training sample weights:
+# - none
+# - balanced
+class_weight_mode: balanced
+
+# Modest hyperparameter grid
+learning_rate_grid: [0.05, 0.10]
+max_depth_grid: [4, 6]
+max_leaf_nodes_grid: [15, 31]
+min_samples_leaf_grid: [20]
+l2_regularization_grid: [0.0, 0.1]
+
+# Maximum boosting iterations before early stopping
+max_iter: 300
+
+# Custom validation-based early stopping
+early_stopping_patience: 20
+early_stopping_min_delta: 0.0
+min_iter_before_stop: 20
+
+# Diagnostics
+performance_bins: 10
+permutation_importance_repeats: 5
