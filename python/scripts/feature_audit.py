@@ -303,7 +303,7 @@ def _ensure_dir(path: str | Path) -> Path:
     return p
 
 
-def plot_feature_histograms(ds: AuditDataset, features: Sequence[str], outdir: str | Path, bins: int = 80, logy: bool = False) -> None:
+def plot_feature_histograms(ds: AuditDataset, features: Sequence[str], outdir: str | Path, bins: int = 80, logy: bool = False, xlim: Optional[Tuple[float,float]] = None) -> None:
     outdir = _ensure_dir(outdir)
     class_to_name = {i: name for i, name in enumerate(ds.class_names)}
     for feature in features:
@@ -317,6 +317,8 @@ def plot_feature_histograms(ds: AuditDataset, features: Sequence[str], outdir: s
             plt.hist(vals, bins=bins, histtype="step", density=True, label=class_to_name.get(int(c), str(c)))
         plt.xlabel(feature)
         plt.ylabel("density")
+        if xlim is not None:
+            plt.xlim(*xlim)
         plt.title(f"Per-class distribution: {feature}")
         if logy:
             plt.yscale("log")
