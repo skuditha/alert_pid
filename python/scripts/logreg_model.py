@@ -214,16 +214,19 @@ def main():
     X_test, y_test = filter_valid(X_test, m_test, y_test)
 
     # Scale
+    X_test_raw = X_test.copy()
     scaler = StandardScaler()
-    X_train = scaler.fit_transform(X_train)
-    X_val = scaler.transform(X_val)
-    X_test = scaler.transform(X_test)
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_val_scaled = scaler.transform(X_val)
+    X_test_scaled = scaler.transform(X_test)
 
     joblib.dump(scaler, os.path.join(args.output_dir, "scaler.joblib"))
 
     # Hyperparameter search (simple grid on val)
     best_model = None
-    best_score = -np.inf
+    best_score = (-1, -np.inf, -np.inf)
+    search_rows = []
+    best_C = None
 
     for C in config["C_values"]:
         model = LogisticRegression(
@@ -232,20 +235,46 @@ def main():
             solver=config["solver"],
             class_weight=config["class_weight"],
             random_state=config["seed"],
+            tol=config.get("tol", 1e-4),
+            n_jobs=config.get("n_jobs", None) if config["solver"] == "saga" else None,
         )
 
-        model.fit(X_train, y_train)
+        model.fit(X_train_scaled, y_train)
 
-        val_pred = model.predict(X_val)
+        val_pred = model.predict(X_val_scaled)
+        val_prob = model.predict_proba(X_val_scaled)
         val_acc = accuracy_score(y_val, val_pred)
+        val_ll = log_loss(y_val, val_prob, labels=np.arange(len(CLASS_NAMES)))
 
-        if val_acc > best_score:
-            best_score = val_acc
+        converged = bool(np.all(model.n_iter_ < config["max_iter"]))
+
+        search_rows.append({
+            "C": C,
+            "solver": config["solver"],
+            "max_iter": config["max_iter"],
+            "tol": config.get("tol", 1e-4),
+            "val_accuracy": val_acc,
+            "val_log_loss": val_ll,
+            "converged": converged,
+            "max_n_iter_used": int(np.max(model.n_iter_)),
+        })
+
+        # prefer converged models first, then accuracy, then log loss
+        score_tuple = (int(converged), val_acc, -val_ll)
+        if score_tuple > best_score:
+            best_score = score_tuple
             best_model = model
+            best_C = C
+
+    # Save search results
+    pd.DataFrame(search_rows).to_csv(
+        os.path.join(args.output_dir, "hyperparameter_search.csv"),
+        index=False
+    )
 
     # Final evaluation
-    y_pred = best_model.predict(X_test)
-    y_prob = best_model.predict_proba(X_test)
+    y_pred = best_model.predict(X_test_scaled)
+    y_prob = best_model.predict_proba(X_test_scaled)
 
     metrics, cm, cm_norm = compute_metrics(y_test, y_pred, y_prob)
 
@@ -264,7 +293,7 @@ def main():
     # Performance vs variables
     for name in ["p", "n_hits", "tof_time", "cluster_energy"]:
         idx = FEATURE_NAMES.index(name)
-        performance_vs_variable(X_test, y_test, y_pred, idx, name, args.output_dir)
+        performance_vs_variable(X_test_raw, y_test, y_pred, idx, name, args.output_dir)
 
     # Coefficients
     analyze_coefficients(best_model, args.output_dir)
