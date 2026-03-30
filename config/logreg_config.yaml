@@ -1,0 +1,9 @@
+seed: 42
+
+C_values: [0.01, 0.1, 1.0, 10.0]
+
+solver: lbfgs
+max_iter: 500
+tol:1.0e-4
+
+class_weight: balanced
