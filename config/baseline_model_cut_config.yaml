@@ -1,0 +1,27 @@
+random_seed: 42
+
+coarse:
+  primary_variable: m2
+  use_beta_fallback: true
+  ambiguity_margin_scale: 0.12
+  beta_guard_margin: 0.03
+
+refinement:
+  variable: dedx_score
+  use_cluster_energy_tiebreaker: true
+  dedx_unknown_margin: 0.03
+  energy_unknown_margin: 0.03
+
+plotting:
+  scatter_alpha: 0.18
+  marker_size: 6
+  max_points_per_class: 12000
+  dpi: 150
+
+output_filenames:
+  metrics_json: metrics_test.json
+  metrics_markdown: metrics_test.md
+  cut_summary: cut_definition_summary.md
+  ambiguity_json: ambiguity_analysis.json
+  val_tuning_json: validation_tuning.json
+  feature_summary_csv: feature_summary_by_class.csv
