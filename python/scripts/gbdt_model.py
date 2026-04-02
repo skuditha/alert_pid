@@ -216,7 +216,7 @@ def prepare_split(
 
 
 def resolve_mask_config(config: Dict) -> Tuple[str, bool]:
-    mode = config.get("masking_mode", "numeric_plus_mask_indicators")
+    mode = config.get("masking_mode", "exclude_masked_rows")
 
     if mode == "numeric_plus_mask_indicators":
         return mode, True

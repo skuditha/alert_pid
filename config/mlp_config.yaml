@@ -5,7 +5,7 @@ seed_list: [42, 43, 44]
 # - numeric_plus_mask_indicators
 # - numeric_only
 # - exclude_masked_rows
-masking_mode: numeric_plus_mask_indicators
+masking_mode: exclude_masked_rows
 
 # Only used when masking_mode == exclude_masked_rows
 append_mask_indicators_when_excluding: false
