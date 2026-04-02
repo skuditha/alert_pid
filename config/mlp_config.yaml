@@ -1,0 +1,37 @@
+random_seed: 42
+seed_list: [42, 43, 44]
+
+# Masking / feature assembly modes:
+# - numeric_plus_mask_indicators
+# - numeric_only
+# - exclude_masked_rows
+masking_mode: numeric_plus_mask_indicators
+
+# Only used when masking_mode == exclude_masked_rows
+append_mask_indicators_when_excluding: false
+
+# Deterministic fill for masked numeric values before scaling / model input:
+# - zero
+# - median
+# - mean
+masked_value_fill_strategy: zero
+
+# Model / training
+hidden_dims: [64, 64, 32]
+activation: relu
+learning_rate: 0.001
+batch_size: 256
+weight_decay: 0.0001
+max_epochs: 150
+early_stopping_patience: 15
+early_stopping_min_delta: 0.0
+
+# Loss weighting
+class_weight_mode: balanced
+
+# Device
+device: cpu
+
+# Diagnostics
+performance_bins: 10
+permutation_importance_repeats: 3
