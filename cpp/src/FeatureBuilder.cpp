@@ -134,7 +134,7 @@ FeatureRow FeatureBuilder::build(const AlertBanks& banks, const CandidateRefs& r
     const float p_drift = banks.getKfPDrift(kf);
     const float sum_residuals = banks.getKfSumResiduals(kf);
 
-    const float tof_time = banks.getClusterTime(cl) - 122.0;
+    const float tof_time = banks.getClusterTime(cl) - 124.0;
     const float pathlength = banks.getClusterPathLength(cl);
     const float cluster_x = banks.getClusterX(cl);
     const float cluster_y = banks.getClusterY(cl);
